@@ -1,0 +1,359 @@
+  SetSeed(8854);
+N:=1024;//N doit etre une puissance de 2
+p:=10007;//p doit etre premier
+a:= 3; // standard deviation
+
+//PARAMETRES
+Reels:= RealField(5);
+ZZ := IntegerRing();
+Zp := quo <ZZ| p>;
+Z<x> := PolynomialRing(Zp);
+R<x> := quo<Z| x^N + 1>;
+taillequartier := (Reels ! p)/4;
+taillehuitieme := (Reels ! p)/8;
+printf "Parametres : \n N = %o\n p = %o\n a = %o \n .......................................................................\n\n",N,p,a;
+valMax := 6*a; //valeur maximum qu'un entier petit peut avoir
+StatisticallyRespresentativeFraction :=Round(N/16); //fraction des indices representant l'ecart type
+NbCoeffsS1 :=3;
+
+//FONCTIONS
+//Gaussian Generation 
+GaussianRandom := function()
+    x1:= 2.0 * Random(10000)/10000 -1.0;
+    x2:= 2.0 * Random(10000)/10000 -1.0;
+    w := x1*x1 +x2*x2;
+    while w ge 1.0 do
+            x1:= 2.0 * Random(10000)/10000 -1.0;
+            x2:= 2.0 * Random(10000)/10000 -1.0;
+            w := x1*x1 +x2*x2;
+    end while;
+    w:= ((-2.0 * Log(w))/w)^(1/2);
+    y1 := x1*w;
+    y2 := x2*w;
+    return Round(y2*a);
+end function;
+
+//Get the coefficients of a polynomial
+coefficients:= function(P)
+    C:=[];
+    for i := 1 to #(Coefficients(P)) do
+        C[i]:=Coefficients(P)[i];
+    end for;
+    for i := #(Coefficients(P))+1 to N do
+        C[i]:=0;
+    end for;
+    return C;
+end function;
+
+//Generation of elements
+genElement := function(G)
+    S:=0;
+    for i := 0 to N-1 do
+            coeff:=Random(G);
+            S:= S+coeff*x^i;
+    end for;
+    return S;
+end function;
+
+genSmallElement := function()
+    S:=0;
+    for i := 0 to N-1 do
+            coeff:=GaussianRandom();
+            S:= S+coeff*x^i;
+    end for;
+    return S;
+end function;
+
+
+genFakeS := function()
+    S1:=0;
+    for i := 0 to NbCoeffsS1 -1 do
+            ind:=Random(N);
+            val:=Random({-1,1});
+            S1:= S1+val*x^ind;
+    end for;
+    return S1;
+end function;
+
+genNewS1 := function(B)
+    S1 := genFakeS();
+    V1:=B*S1;
+    printf "Recherche S' avec %o coefficients",NbCoeffsS1;
+    while coefficients(V1)[1] gt 5 and coefficients(V1)[1] lt (p-5) do
+    	printf"-";
+        S1 := genFakeS();
+        V1:=B*S1;
+    end while;
+    printf"\n";
+    return S1;
+end function;
+
+
+
+//Reconciliation vector generation
+genC:=function(V1)
+    C:=[];
+    cleB := [];
+    for i := 1 to N do
+              huitieme :=ZZ! Floor((Reels! (ZZ! coefficients(V1)[i])) / taillehuitieme);
+              if huitieme ge 1 and huitieme lt 5 then
+                  cleB[i]:=0;
+             else
+		  cleB[i]:=1;
+             end if;
+             if (huitieme ge 1 and huitieme lt 3) or (huitieme ge 5 and huitieme lt 7) then
+                      C[i]:=0;
+             else
+                      C[i]:=1;
+             end if;
+    end for;
+    return cleB, C;
+end function;
+
+
+
+
+AliceDebut := function(A)
+       S:=genSmallElement();
+       E:=genSmallElement();
+       B:=A*S+E;
+       return S,E,B;
+end function;
+
+Bob := function(A,B)
+    S1:=genSmallElement();
+    E1:=genSmallElement();
+    U:=A*S1+E1;
+    V1:=B*S1;
+    cleB,C := genC(V1);
+    return U,C,cleB;
+end function;
+
+
+AliceReconciliation := function(U,C,S)
+    V:=U*S;
+    cleA:=[];
+    for i := 1 to N do
+        huitieme :=(Reels! (ZZ! coefficients(V)[i])) / taillehuitieme;
+        if C[i] eq 0 then
+           if (huitieme ge 0 and huitieme lt 4) then
+                 cleA[i]:=0;
+            else
+              cleA[i]:=1;
+           end if;
+        else
+           if (huitieme ge 2 and huitieme lt 6) then
+                 cleA[i]:=0;
+            else
+              cleA[i]:=1;
+           end if;
+        end if;
+    //printf "i = %o, huitieme = %o, C[i] = %o, valeur associee = %o  \n",i,huitieme,C[i],cleA[i];
+    end for;
+    return cleA;
+end function;
+
+Verification := function(cleA,cleB)
+    ok := 0;
+    for i := 1 to N do
+        if cleA[i] ne cleB[i] then
+            printf "Attention erreur reconciliation sans attaque %o \n", i ;
+            ok:=ok +1;
+        end if;
+    end for;
+    return ok;
+end function;
+
+
+Argmax:=function(Tab)
+    i0:=1;
+    for i :=2 to #Tab do
+        if Tab[i] gt Tab[i0] then
+            i0:=i;
+        end if;
+    end for;
+    return i0;
+end function;
+
+//Oracle signe
+Signe := function(i,j,k,S1,S,A,B)
+   signe:=[];
+   V1:=B*S1;
+   E1:= x^(-i);
+   U:=(Zp!j)*A*S1+(Zp!k)*E1;
+   cleB,C:=genC(j*V1);
+   C[1]:=0;
+   cleA := AliceReconciliation(U,C,S); //1 requete
+   if cleA[1] eq cleB[1] then
+         signe := -1;
+   else
+         signe := +1;
+   end if;
+   return signe;
+end function;
+
+dichoSurk := function(i,j,S1,S,A,B)
+    a1:= - valMax;
+    b := valMax;
+    nbQueriesDicho:=0;
+    while (b-a1) gt 1 do
+        //printf "a=%o, b=%o\n",a,b;
+        m:= Round((a1+b)/2);
+        nbQueriesDicho := nbQueriesDicho +2;
+        if Signe(i,j,m,S1,S,A,B)*Signe(i,j,a1,S1,S,A,B) gt 0 then
+            a1:= m;
+        else
+            b:=m;
+       end if;
+    end while;
+    return a1+1, nbQueriesDicho;
+end function;
+
+dichoSurj := function(i,k,S1,S,A,B)
+    a1:= - valMax;
+    b := valMax;
+    nbQueriesDicho:=0;
+    while (b-a1) gt 1 do
+        m:= Round((a1+b)/2);
+        nbQueriesDicho := nbQueriesDicho +2;
+        if Signe(i,m,k,S1,S,A,B)*Signe(i,a1,k,S1,S,A,B) gt 0 then
+            a1:=m;
+        else
+            b:=m;
+        end if;
+    end while;
+    return a1+1, nbQueriesDicho;
+end function;
+
+//Fonction qui renvoie l'estimation de delta
+verificationS1:= function(S1,S,A,B,SupportS,iteration)
+    //parametres
+    division := StatisticallyRespresentativeFraction;
+    printf "Verification de S', calcul de %o rapports S[i]/delta \n",Round(N/division);
+    if iteration lt division then
+        intervalleEtude := [iteration*Round(N/division)..(iteration+1)*Round(N/division)];
+    else
+        intervalleEtude := [0..Round(N/division)];
+    end if;
+    standardDeviation := 0;
+    signe:=0;
+    tot:=0;
+    j1:=a;
+    j2:=-a;
+    SupportSverif := SupportS;
+    nbQueriesVerif := 0;
+    printf "i = ";
+    for i in intervalleEtude do
+    	printf "%o, ",i;
+        if i in SupportS then
+            k1,nbQueries1:= dichoSurk(i,j1,S1,S,A,B);
+            k2,nbQueries2:= dichoSurk(i,j2,S1,S,A,B);
+            nbQueriesVerif := nbQueriesVerif + nbQueries1 + nbQueries2;
+            if k1 ne k2 then
+                 tot := tot+1;
+                 standardDeviation := standardDeviation + ((j2-j1)/((Reels ! k2)- (Reels ! k1)))^2;
+                     if k2-k1 ge 0 and signe eq 0 then
+                        signe := Signe(i,0,1,S1,S,A,B);
+                        nbQueriesVerif := nbQueriesVerif+1;
+                     elif k2-k1 lt 0 and signe eq 0 then
+                        signe := -Signe(i,0,1,S1,S,A,B);
+                        nbQueriesVerif := nbQueriesVerif+1;
+                    end if;
+            elif (k1 eq valMax-1) then
+                tot := tot+1;
+                Exclude(~SupportSverif, i);
+	    end if;
+        end if;
+    end for;
+    if tot ne 0 then
+        standardDeviation := standardDeviation * (1/(Reels!tot));
+        standardDeviation := (standardDeviation)^(1/2);
+	printf "\nResultats test %o : (vrai delta = %o, estimation = %o, NbQueries = %o)\n", iteration, coefficients(A*S*S1)[1],a/standardDeviation, nbQueriesVerif;
+    end if;
+    if a/standardDeviation lt 1.0001 and a/standardDeviation gt 0 then
+        return signe, nbQueriesVerif,SupportSverif;
+    elif a/standardDeviation lt 2.0001 then
+        return 2*signe, nbQueriesVerif,SupportSverif;
+    /*elif a/standardDeviation lt 3.0001 then
+        return 3*signe, nbQueriesVerif,SupportSverif;*/
+    else return 0, nbQueriesVerif,SupportSverif;
+    end if;
+end function;
+
+
+
+
+//PROTOCOLES
+//RealBob
+
+A:=genElement(Zp);
+S,E,B := AliceDebut(A);
+U,C,cleB := Bob(A,B);
+cleA := AliceReconciliation(U,C,S);
+erreurs:=Verification(cleA,cleB);
+
+
+
+//FakeBob
+
+nbQueries:=0;
+A:=genElement(Zp);
+S,E,B := AliceDebut(A);
+printf "Secret S = %o\n\n .......................................................................\n                       -Debut attaque Fluhrer- \n",S;
+t:= Realtime();
+SupportS := [0..N-1];
+
+//Etape 1 : generer S' et delta
+printf "\nEtape 1 : Trouver S' tel que delta est petit\n\n";
+printf "Test 0\n";
+S1:=genNewS1(B);
+printf "Nouvel S' genere (vrai delta = %o)\n", coefficients(A*S*S1)[1];
+delta, nbQueriesverif,SupportS := verificationS1(S1,S,A,B,SupportS,0);
+nbQueries:=nbQueries+ nbQueriesverif;
+iteration:=1;
+while delta eq 0 do
+    print "delta refuse\n";
+    printf "Test %o\n",iteration;
+    if coefficients(A*S*S1)[1] eq 1 or coefficients(A*S*S1)[1] eq p-1 then
+       printf "\n Un bon candidat a ete rejete, les parametres de verification sont trop stricts\n";
+    end if;
+    S1:=genNewS1(B);
+    printf "Nouvel S' genere (vrai delta = %o)\n", coefficients(A*S*S1)[1];
+    delta, nbQueriesverif,SupportS := verificationS1(S1,S,A,B,SupportS,iteration);
+    iteration := iteration +1;
+    nbQueries:=nbQueries+ nbQueriesverif;
+end while;
+
+if  delta ne coefficients(A*S*S1)[1] then
+        printf "\n Erreur ! Un mauvais candidat a ete accepte, les parametres sont trop permissifs. Delta renvoyé : %o, Delta reel: %o\n",delta,
+coefficients(A*S*S1)[1];
+else
+    printf "\nEtape 1 terminee : S' et delta (=%o) trouves en %o essai(s)\n\n",delta,iteration;  
+end if;
+
+//Etape 2 : retrouver S
+printf "Etape 2 : Reconstruire S\n\n";
+V1:=B*S1;
+S2:=0;
+k:=delta;
+for i in SupportS do
+    t1 := Realtime();
+    j,nbQueriesdicho:= dichoSurj(i,k,S1,S,A,B);
+    nbQueries:=nbQueries+ nbQueriesdicho;
+    if k gt 0 then
+                S2:=S2 + (-j)*x^i;
+    else
+                S2:=S2 + (-j+1)*x^i;
+    end if;
+    if i eq SupportS[1] then
+	printf "Estimation pour la reconstitution : %o requetes en %o secondes (%o requetes et %o secondes par indice)\n",nbQueriesdicho*#SupportS,Realtime(t1)*#SupportS,nbQueriesdicho,Realtime(t1);
+    end if;
+    printf "%o, ",i;
+end for;
+print "\n";
+
+if S ne S2 then
+    printf("Erreur! Secret non trouve\n");
+else
+    printf "\n Secret trouve en %o requetes et %o secondes au total\n .......................................................................\n",nbQueries,Realtime(t);
+end if;
