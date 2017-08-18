@@ -1,0 +1,145 @@
+  SetSeed(8854);
+N:=1024;//N doit etre une puissance de 2
+q:=10007;//q doit etre premier
+a:= 1; // standard deviation
+
+//PARAMETRES
+Reels:= RealField(5);
+ZZ := IntegerRing();
+n:= Round(N/4);
+Zq := quo <ZZ| q>;
+Z<x> := PolynomialRing(Zq);
+R<x> := quo<Z| x^N + 1>;
+printf "Parametres : \n N = %o\n q = %o\n a = %o \n n=%o \n .......................................................................\n\n",N,q,a,n;
+
+
+//FONCTIONS
+//Gaussian Generation 
+GaussianRandom := function()
+    x1:= 2.0 * Random(10000)/10000 -1.0;
+    x2:= 2.0 * Random(10000)/10000 -1.0;
+    w := x1*x1 +x2*x2;
+    while w ge 1.0 do
+            x1:= 2.0 * Random(10000)/10000 -1.0;
+            x2:= 2.0 * Random(10000)/10000 -1.0;
+            w := x1*x1 +x2*x2;
+    end while;
+    w:= ((-2.0 * Log(w))/w)^(1/2);
+    y1 := x1*w;
+    y2 := x2*w;
+    return Round(y2*a);
+end function;
+
+//Get the coefficients of a polynomial
+coefficients:= function(P)
+    C:=[];
+    for i := 1 to #(Coefficients(P)) do
+        C[i]:=Coefficients(P)[i];
+    end for;
+    for i := #(Coefficients(P))+1 to N do
+        C[i]:=0;
+    end for;
+    return C;
+end function;
+
+//Generation of elements
+genElement := function(G)
+    S:=0;
+    for i := 0 to N-1 do
+            coeff:=Random(G);
+            S:= S+coeff*x^i;
+    end for;
+    return S;
+end function;
+
+genSmallElement := function()
+    S:=0;
+    for i := 0 to N-1 do
+            coeff:=GaussianRandom();
+            S:= S+coeff*x^i;
+    end for;
+    return S;
+end function;
+
+
+
+AliceDebut := function(A)
+       S:=genSmallElement();
+       E:=genSmallElement();
+       B:=A*S+E;
+       return S,E,B;
+end function;
+
+Bob := function(A,B)
+    S1:=genSmallElement();
+    E1:=genSmallElement();
+    U:=A*S1+E1;
+    V1:=B*S1;
+    cleB:= [];
+    for i:=1 to n do
+        cleB[i]:=Random({0,1});
+    end for;
+    Encoding:=[];
+    for i := 1 to n do
+        val :=Zq!(cleB[i]*Round(q/2));
+        Encoding[i]:=val;
+        Encoding[i+n]:= val;
+        Encoding[i+2*n]:=val;
+        Encoding[i+3*n]:= val;           
+    end for;
+    C:=V1;
+    for i:= 0 to N-1 do
+        C:= C + Encoding[i+1]*x^i; 
+    end for;
+    return U,C,cleB;
+end function;
+
+AliceReconciliation := function(U,C,S)
+    V:=U*S;
+    C1 := C-V;
+    coeffs := coefficients(C1);
+    cleA:=[];
+    for i := 1 to n do
+        t:= Abs(ZZ!coeffs[i]-Round(q/2))+ Abs(ZZ!coeffs[i+n]-Round(q/2))+ Abs(ZZ!coeffs[i+2*n]-Round(q/2)) + Abs(ZZ!coeffs[i+3*n]-Round(q/2));
+        if t lt q then
+            cleA[i]:=1;
+        else
+            cleA[i]:=0;
+        end if;
+    end for;
+    return cleA;
+end function;
+
+
+Verification := function(cleA,cleB)
+    ok := 0;
+    for i := 1 to n do
+        if cleA[i] ne cleB[i] then
+            printf "Attention erreur reconciliation sans attaque %o \n", i ;
+            ok:=ok +1;
+        end if;
+    end for;
+    return ok;
+end function;
+
+
+Argmax:=function(Tab)
+    i0:=1;
+    for i :=2 to #Tab do
+        if Tab[i] gt Tab[i0] then
+            i0:=i;
+        end if;
+    end for;
+    return i0;
+end function;
+
+
+
+//PROTOCOLES
+
+A:=genElement(Zq);
+S,E,B := AliceDebut(A);
+U,C,cleB := Bob(A,B);
+cleA := AliceReconciliation(U,C,S);
+erreurs:=Verification(cleA,cleB);
+
