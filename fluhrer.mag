@@ -1,4 +1,4 @@
-  SetSeed(8854);
+SetSeed(8854);
 N:=1024;//N doit etre une puissance de 2
 p:=10007;//p doit etre premier
 a:= 3; // standard deviation
